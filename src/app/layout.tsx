@@ -18,6 +18,9 @@ export const metadata: Metadata = {
   title: "Modder AI — Create Minecraft Mods with AI",
   description: "Create Minecraft mods, plugins, datapacks and more with AI. 20+ powerful tools, 12+ loaders, MC 1.7.10–1.21. Auto-JAR building. Free to start.",
   metadataBase: new URL("https://modderai.net"),
+  icons: {
+    icon: "/modderai-favicon.jpeg",
+  },
   openGraph: {
     title: "Modder AI — Create Minecraft Mods with AI",
     description: "20+ AI tools for Minecraft modding. Describe what you want, download a working plugin. Supports Paper, Fabric, Forge and more.",

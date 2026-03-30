@@ -20,12 +20,21 @@ export default function Navbar() {
           <Link href="/dashboard" className="text-foreground/60 hover:text-foreground transition-colors">
             Dashboard
           </Link>
+          <Link href="/pricing" className="text-foreground/60 hover:text-foreground transition-colors">
+            Pricing
+          </Link>
           <Link href="/gallery" className="text-foreground/60 hover:text-foreground transition-colors">
             Gallery
           </Link>
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/pricing"
+            className="hidden sm:inline-flex px-3 py-1.5 rounded-lg bg-gradient-to-r from-primary to-accent text-white text-xs font-bold hover:opacity-90 transition-opacity"
+          >
+            Upgrade
+          </Link>
           {session?.user ? (
             <div className="relative">
               <button
