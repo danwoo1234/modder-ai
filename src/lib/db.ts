@@ -144,3 +144,24 @@ export async function incrementGenerations(userId: string): Promise<{ allowed: b
   }
   return { allowed: false, used: 0, limit: 0 };
 }
+
+export async function updateUserTier(email: string, tier: UserTier): Promise<boolean> {
+  const cfg = kvConfig();
+
+  if (cfg) {
+    const raw = await kvGet(`user:email:${email}`);
+    if (!raw) return false;
+    const user = JSON.parse(raw) as User;
+    user.tier = tier;
+    user.generationsLimit = tierLimits[tier];
+    await kvPut(`user:email:${email}`, JSON.stringify(user));
+    return true;
+  }
+
+  // Fallback: in-memory
+  const user = memoryStore.get(email);
+  if (!user) return false;
+  user.tier = tier;
+  user.generationsLimit = tierLimits[tier];
+  return true;
+}

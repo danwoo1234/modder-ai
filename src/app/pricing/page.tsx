@@ -67,7 +67,7 @@ const plans = [
 export default function PricingPage() {
   const { data: session } = useSession();
 
-  const handleCta = (action: string) => {
+  const handleCta = async (action: string) => {
     if (action === "dashboard") {
       window.location.href = "/dashboard";
       return;
@@ -76,8 +76,25 @@ export default function PricingPage() {
       signIn("google");
       return;
     }
-    // TODO: integrate with Lemon Squeezy checkout
-    alert("Payment integration coming soon! Contact support@modderai.net for early access.");
+
+    const plan = action === "checkout-pro" ? "pro" : action === "checkout-vip" ? "vip" : null;
+    if (!plan) return;
+
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || "Failed to start checkout. Please try again.");
+      }
+    } catch {
+      alert("Something went wrong. Please try again.");
+    }
   };
 
   return (
