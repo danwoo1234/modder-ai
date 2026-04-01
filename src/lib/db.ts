@@ -4,9 +4,13 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  image?: string;
   tier: UserTier;
+  isAdmin: boolean;
   generationsUsed: number;
   generationsLimit: number;
+  createdAt: string;
+  lastLoginAt: string;
 }
 
 const tierLimits: Record<UserTier, number> = {
@@ -87,8 +91,11 @@ export async function getUserByEmail(email: string): Promise<User | null> {
       email,
       name: email.split("@")[0],
       tier: "free",
+      isAdmin: false,
       generationsUsed: 0,
       generationsLimit: tierLimits.free,
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
     };
     await kvPut(`user:email:${email}`, JSON.stringify(user));
     await kvPut(`user:id:${user.id}`, email);
@@ -102,8 +109,11 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     email,
     name: email.split("@")[0],
     tier: "free",
+    isAdmin: false,
     generationsUsed: 0,
     generationsLimit: tierLimits.free,
+    createdAt: new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
   };
   memoryStore.set(email, user);
   return user;
@@ -164,4 +174,35 @@ export async function updateUserTier(email: string, tier: UserTier): Promise<boo
   user.tier = tier;
   user.generationsLimit = tierLimits[tier];
   return true;
+}
+
+/**
+ * Update user profile on login (name, image, lastLoginAt).
+ * Preserves existing fields like tier and isAdmin.
+ */
+export async function updateUserLogin(
+  email: string,
+  profile: { name?: string | null; image?: string | null }
+): Promise<void> {
+  const cfg = kvConfig();
+
+  if (cfg) {
+    const raw = await kvGet(`user:email:${email}`);
+    if (!raw) return;
+    const user = JSON.parse(raw) as User;
+    if (profile.name) user.name = profile.name;
+    if (profile.image) user.image = profile.image;
+    user.lastLoginAt = new Date().toISOString();
+    // Ensure isAdmin field exists for older records
+    if (user.isAdmin === undefined) user.isAdmin = false;
+    await kvPut(`user:email:${email}`, JSON.stringify(user));
+    return;
+  }
+
+  // Fallback: in-memory
+  const user = memoryStore.get(email);
+  if (!user) return;
+  if (profile.name) user.name = profile.name;
+  if (profile.image) user.image = profile.image;
+  user.lastLoginAt = new Date().toISOString();
 }

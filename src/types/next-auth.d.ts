@@ -8,11 +8,13 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       tier?: "free" | "pro" | "vip";
+      isAdmin?: boolean;
     };
   }
 
   interface JWT {
     tier?: string;
     dbId?: string;
+    isAdmin?: boolean;
   }
 }

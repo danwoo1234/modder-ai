@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { getUserByEmail } from "./db";
+import { getUserByEmail, updateUserLogin } from "./db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -16,11 +16,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
-    async signIn({ user }) {
-      // Ensure user exists in Cloudflare KV on first sign-in
+    async signIn({ user, profile }) {
+      // Save / update user in Cloudflare KV on every sign-in
       if (user.email) {
         try {
+          // Ensure user record exists first
           await getUserByEmail(user.email);
+          // Then update with Google profile data
+          await updateUserLogin(user.email, {
+            name: profile?.name ?? user.name,
+            image: (profile?.picture as string) ?? user.image,
+          });
         } catch {
           // Don't block sign-in if KV is temporarily unavailable
         }
@@ -28,7 +34,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true;
     },
     async jwt({ token, trigger }) {
-      // On sign-in or when tier is missing, fetch from KV and store in JWT
       if (
         token.email &&
         (trigger === "signIn" || trigger === "signUp" || trigger === "update" || !token.tier)
@@ -38,17 +43,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (dbUser) {
             token.tier = dbUser.tier;
             token.dbId = dbUser.id;
+            token.isAdmin = dbUser.isAdmin ?? false;
           }
         } catch {
-          // Fallback: keep existing token values or default to free
           if (!token.tier) token.tier = "free";
+          if (token.isAdmin === undefined) token.isAdmin = false;
         }
       }
       return token;
     },
     async session({ session, token }) {
-      // Read from JWT token — no DB call needed on every request
       session.user.tier = (token.tier as "free" | "pro" | "vip") ?? "free";
+      session.user.isAdmin = (token.isAdmin as boolean) ?? false;
       if (token.dbId) {
         session.user.id = token.dbId as string;
       }

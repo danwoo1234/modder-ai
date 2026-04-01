@@ -18,5 +18,10 @@ export async function GET() {
     generationsUsed: user.generationsUsed,
     generationsLimit: user.generationsLimit,
     hasSubscription: user.tier !== "free",
+    isAdmin: user.isAdmin ?? false,
+    name: user.name,
+    image: user.image,
+    createdAt: user.createdAt,
+    lastLoginAt: user.lastLoginAt,
   });
 }

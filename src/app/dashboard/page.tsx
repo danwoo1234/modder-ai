@@ -11,6 +11,7 @@ interface UserData {
   generationsUsed: number;
   generationsLimit: number;
   hasSubscription: boolean;
+  isAdmin: boolean;
 }
 
 export default function Dashboard() {
@@ -73,6 +74,11 @@ export default function Dashboard() {
               <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${currentTier === "free" ? "bg-success/10 text-success" : currentTier === "pro" ? "bg-primary/10 text-primary-light" : "bg-gold/10 text-gold"}`}>
                 {currentTier.toUpperCase()}
               </span>
+              {userData?.isAdmin && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-red-500/10 text-red-400">
+                  ADMIN
+                </span>
+              )}
               <span className="text-sm text-foreground/50">
                 {currentTier === "free" ? `${remaining} gen remaining` : "Unlimited generations"}
               </span>
