@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { getUserByEmail, updateUserLogin } from "./db";
+import { getUserByEmail, updateUserLogin, getEffectiveTier } from "./db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -41,7 +41,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           const dbUser = await getUserByEmail(token.email);
           if (dbUser) {
-            token.tier = dbUser.tier;
+            token.tier = getEffectiveTier(dbUser);
             token.dbId = dbUser.id;
             token.isAdmin = dbUser.isAdmin ?? false;
           }

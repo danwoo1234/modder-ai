@@ -15,14 +15,21 @@ interface GenerateResult {
 export async function generateWithAI(options: GenerateOptions): Promise<GenerateResult> {
   const { prompt, systemPrompt, tier, maxTokens = 4096 } = options;
 
-  // Use Anthropic SDK if available, otherwise fall back to OpenAI
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
 
-  if (anthropicKey) {
+  // -----------------------------------------------------------------------
+  // VIP ($99/mo) → Claude Opus 4.6  (best quality, highest cost)
+  // PRO ($12/mo) → GPT-5.2 Pro      (great quality, moderate cost)
+  // FREE ($0)    → GPT-4o-mini      (cheapest, still decent)
+  // -----------------------------------------------------------------------
+
+  if (tier === "vip") {
+    // VIP: Claude Opus 4.6 via Anthropic
+    if (!anthropicKey) throw new Error("ANTHROPIC_API_KEY not configured for VIP tier");
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey: anthropicKey });
-    const model = tier === "vip" ? "claude-sonnet-4-20250514" : "claude-haiku-4-20250414";
+    const model = "claude-opus-4-20250801";
     const msg = await client.messages.create({
       model,
       max_tokens: maxTokens,
@@ -30,13 +37,15 @@ export async function generateWithAI(options: GenerateOptions): Promise<Generate
       messages: [{ role: "user", content: prompt }],
     });
     const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-    return { content: text, modelLabel: model };
+    return { content: text, modelLabel: "Claude Opus 4.6" };
   }
 
-  if (openaiKey) {
+  if (tier === "pro") {
+    // PRO: GPT-5.2 Pro via OpenAI
+    if (!openaiKey) throw new Error("OPENAI_API_KEY not configured for Pro tier");
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey: openaiKey });
-    const model = tier === "vip" ? "gpt-4o" : "gpt-4o-mini";
+    const model = "gpt-5.2-pro";
     const res = await client.chat.completions.create({
       model,
       max_tokens: maxTokens,
@@ -45,10 +54,40 @@ export async function generateWithAI(options: GenerateOptions): Promise<Generate
         { role: "user", content: prompt },
       ],
     });
-    return { content: res.choices[0]?.message?.content ?? "", modelLabel: model };
+    return { content: res.choices[0]?.message?.content ?? "", modelLabel: "GPT-5.2 Pro" };
   }
 
-  throw new Error("No AI API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
+  // FREE: cheapest model to never lose money
+  if (openaiKey) {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey: openaiKey });
+    const model = "gpt-4o-mini";
+    const res = await client.chat.completions.create({
+      model,
+      max_tokens: Math.min(maxTokens, 2048), // cap free tier tokens
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+    });
+    return { content: res.choices[0]?.message?.content ?? "", modelLabel: "GPT-4o Mini" };
+  }
+
+  if (anthropicKey) {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey: anthropicKey });
+    const model = "claude-haiku-4-20250414";
+    const msg = await client.messages.create({
+      model,
+      max_tokens: Math.min(maxTokens, 2048),
+      system: systemPrompt,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+    return { content: text, modelLabel: "Claude Haiku" };
+  }
+
+  throw new Error("No AI API key configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.");
 }
 
 export const systemPrompts = {

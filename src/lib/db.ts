@@ -6,11 +6,35 @@ export interface User {
   name: string;
   image?: string;
   tier: UserTier;
+  tierExpires?: string | null;
+  permanent?: boolean;
   isAdmin: boolean;
   generationsUsed: number;
   generationsLimit: number;
   createdAt: string;
   lastLoginAt: string;
+}
+
+/**
+ * Compute the real tier, accounting for expiration.
+ * permanent=true or admin → never expires.
+ * Otherwise check tierExpires date.
+ */
+export function getEffectiveTier(user: Partial<User> | null): UserTier {
+  if (!user) return "free";
+  const stored = (user.tier || "free") as UserTier;
+  if (stored === "free") return "free";
+  if (user.isAdmin) return stored;          // admin never expires
+  if (user.permanent === true) return stored; // permanent purchase
+  if (!user.tierExpires) return stored;       // no expiry set → permanent
+  const exp = new Date(user.tierExpires);
+  if (!isFinite(exp.getTime())) return stored;
+  return exp.getTime() > Date.now() ? stored : "free";
+}
+
+export function isProOrVip(user: Partial<User> | null): boolean {
+  const t = getEffectiveTier(user);
+  return t === "pro" || t === "vip";
 }
 
 const tierLimits: Record<UserTier, number> = {
@@ -81,7 +105,20 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     const raw = await kvGet(`user:email:${email}`);
     if (raw) {
       const data = JSON.parse(raw) as User;
-      data.generationsLimit = tierLimits[data.tier];
+      // Backfill optional fields for older records
+      if (data.permanent === undefined) data.permanent = false;
+      if (data.tierExpires === undefined) data.tierExpires = null;
+
+      // Lazy-downgrade: if paid tier expired, auto-downgrade to free
+      const effective = getEffectiveTier(data);
+      if (effective === "free" && data.tier !== "free") {
+        data.tier = "free";
+        data.tierExpires = null;
+        data.permanent = false;
+        await kvPut(`user:email:${email}`, JSON.stringify(data));
+      }
+
+      data.generationsLimit = tierLimits[getEffectiveTier(data)];
       return data;
     }
 
@@ -91,6 +128,8 @@ export async function getUserByEmail(email: string): Promise<User | null> {
       email,
       name: email.split("@")[0],
       tier: "free",
+      tierExpires: null,
+      permanent: false,
       isAdmin: false,
       generationsUsed: 0,
       generationsLimit: tierLimits.free,
@@ -109,6 +148,8 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     email,
     name: email.split("@")[0],
     tier: "free",
+    tierExpires: null,
+    permanent: false,
     isAdmin: false,
     generationsUsed: 0,
     generationsLimit: tierLimits.free,
@@ -155,15 +196,28 @@ export async function incrementGenerations(userId: string): Promise<{ allowed: b
   return { allowed: false, used: 0, limit: 0 };
 }
 
-export async function updateUserTier(email: string, tier: UserTier): Promise<boolean> {
+export async function updateUserTier(
+  email: string,
+  tier: UserTier,
+  opts?: { expiresAt?: string | null; permanent?: boolean }
+): Promise<boolean> {
   const cfg = kvConfig();
 
   if (cfg) {
     const raw = await kvGet(`user:email:${email}`);
     if (!raw) return false;
     const user = JSON.parse(raw) as User;
+    // Admin users are always permanent — never downgrade
+    if (user.isAdmin && tier === "free") return true;
     user.tier = tier;
     user.generationsLimit = tierLimits[tier];
+    if (opts?.permanent !== undefined) user.permanent = opts.permanent;
+    if (opts?.expiresAt !== undefined) user.tierExpires = opts.expiresAt;
+    // Reset if downgrading to free
+    if (tier === "free") {
+      user.tierExpires = null;
+      user.permanent = false;
+    }
     await kvPut(`user:email:${email}`, JSON.stringify(user));
     return true;
   }
@@ -171,6 +225,7 @@ export async function updateUserTier(email: string, tier: UserTier): Promise<boo
   // Fallback: in-memory
   const user = memoryStore.get(email);
   if (!user) return false;
+  if (user.isAdmin && tier === "free") return true;
   user.tier = tier;
   user.generationsLimit = tierLimits[tier];
   return true;

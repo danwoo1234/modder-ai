@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getUserByEmail, incrementGenerations } from "@/lib/db";
+import { getUserByEmail, incrementGenerations, getEffectiveTier } from "@/lib/db";
 import { generateWithAI } from "@/lib/ai";
 
 const SYSTEM_PROMPT = `You are a Minecraft plugin/mod developer. Given a description, generate a complete, working plugin.
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         error: "Generation limit reached for this month",
         used: genCheck.used,
         limit: genCheck.limit,
-        tier: user.tier,
+        tier: getEffectiveTier(user),
       },
       { status: 429 }
     );
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     const result = await generateWithAI({
       prompt: fullPrompt,
       systemPrompt: SYSTEM_PROMPT,
-      tier: user.tier,
+      tier: getEffectiveTier(user),
       maxTokens: 4096,
     });
 

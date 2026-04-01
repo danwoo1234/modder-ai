@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getUserByEmail, incrementGenerations } from "@/lib/db";
+import { getUserByEmail, incrementGenerations, getEffectiveTier } from "@/lib/db";
 import { generateWithAI, systemPrompts } from "@/lib/ai";
 import type { UserTier } from "@/lib/db";
 
@@ -73,13 +73,14 @@ export async function POST(request: NextRequest) {
   }
 
   // Tier access check
+  const effectiveTier = getEffectiveTier(user);
   const requiredTier = toolTierRequirement[toolId] || "free";
-  if (!hasAccess(user.tier, requiredTier)) {
+  if (!hasAccess(effectiveTier, requiredTier)) {
     return NextResponse.json(
       {
         error: `This tool requires ${requiredTier} tier or higher`,
         requiredTier,
-        currentTier: user.tier,
+        currentTier: effectiveTier,
       },
       { status: 403 }
     );
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
         error: "Generation limit reached for this month",
         used: genCheck.used,
         limit: genCheck.limit,
-        tier: user.tier,
+        tier: effectiveTier,
       },
       { status: 429 }
     );
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
     const result = await generateWithAI({
       prompt: fullPrompt,
       systemPrompt,
-      tier: user.tier,
+      tier: effectiveTier,
       maxTokens: 4096,
     });
 
