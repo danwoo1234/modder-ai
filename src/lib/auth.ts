@@ -2,25 +2,6 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { getUserByEmail } from "./db";
 
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id?: string;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-      tier?: "free" | "pro" | "vip";
-    };
-  }
-}
-
-declare module "@auth/core/jwt" {
-  interface JWT {
-    tier?: string;
-    dbId?: string;
-  }
-}
-
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({
