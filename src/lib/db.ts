@@ -59,6 +59,10 @@ function kvConfig() {
   if (accountId && namespaceId && apiToken) {
     return { accountId, namespaceId, apiToken };
   }
+  console.warn(
+    "[KV] Missing env vars — falling back to in-memory storage.",
+    { hasAccountId: !!accountId, hasNamespace: !!namespaceId, hasToken: !!apiToken }
+  );
   return null;
 }
 
@@ -68,25 +72,59 @@ const KV_BASE = (acct: string, ns: string) =>
 async function kvGet(key: string): Promise<string | null> {
   const cfg = kvConfig();
   if (!cfg) return null;
-  const res = await fetch(
-    `${KV_BASE(cfg.accountId, cfg.namespaceId)}/values/${encodeURIComponent(key)}`,
-    { headers: { Authorization: `Bearer ${cfg.apiToken}` } }
-  );
-  if (!res.ok) return null;
-  return res.text();
+  try {
+    const url = `${KV_BASE(cfg.accountId, cfg.namespaceId)}/values/${encodeURIComponent(key)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${cfg.apiToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      if (res.status !== 404) {
+        const errText = await res.text().catch(() => "");
+        console.error(`[KV GET] ${key} failed: ${res.status} ${errText}`);
+      }
+      return null;
+    }
+    return res.text();
+  } catch (err) {
+    console.error(`[KV GET] ${key} error:`, err);
+    return null;
+  }
 }
 
-async function kvPut(key: string, value: string): Promise<void> {
+async function kvPut(key: string, value: string): Promise<boolean> {
   const cfg = kvConfig();
-  if (!cfg) return;
-  await fetch(
-    `${KV_BASE(cfg.accountId, cfg.namespaceId)}/values/${encodeURIComponent(key)}`,
-    {
+  if (!cfg) {
+    console.warn(`[KV PUT] skipped (no config) key=${key}`);
+    return false;
+  }
+  try {
+    const url = `${KV_BASE(cfg.accountId, cfg.namespaceId)}/values/${encodeURIComponent(key)}`;
+    const res = await fetch(url, {
       method: "PUT",
-      headers: { Authorization: `Bearer ${cfg.apiToken}` },
+      headers: {
+        Authorization: `Bearer ${cfg.apiToken}`,
+        "Content-Type": "text/plain",
+      },
       body: value,
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.error(`[KV PUT] ${key} failed: ${res.status} ${errText}`);
+      return false;
     }
-  );
+    // Cloudflare returns { success: true/false, ... }
+    const result = await res.json().catch(() => null);
+    if (result && result.success === false) {
+      console.error(`[KV PUT] ${key} API error:`, JSON.stringify(result.errors));
+      return false;
+    }
+    console.log(`[KV PUT] ${key} OK`);
+    return true;
+  } catch (err) {
+    console.error(`[KV PUT] ${key} error:`, err);
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -136,8 +174,11 @@ export async function getUserByEmail(email: string): Promise<User | null> {
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
     };
-    await kvPut(`user:email:${email}`, JSON.stringify(user));
-    await kvPut(`user:id:${user.id}`, email);
+    const ok1 = await kvPut(`user:email:${email}`, JSON.stringify(user));
+    const ok2 = await kvPut(`user:id:${user.id}`, email);
+    if (!ok1 || !ok2) {
+      console.error(`[DB] Failed to create user in KV for ${email} (ok1=${ok1}, ok2=${ok2})`);
+    }
     return user;
   }
 

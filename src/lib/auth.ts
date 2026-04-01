@@ -20,15 +20,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Save / update user in Cloudflare KV on every sign-in
       if (user.email) {
         try {
-          // Ensure user record exists first
-          await getUserByEmail(user.email);
+          // Ensure user record exists first (auto-creates in KV if missing)
+          const dbUser = await getUserByEmail(user.email);
+          console.log(`[Auth] signIn: ${user.email} tier=${dbUser?.tier} isAdmin=${dbUser?.isAdmin}`);
           // Then update with Google profile data
           await updateUserLogin(user.email, {
             name: profile?.name ?? user.name,
             image: (profile?.picture as string) ?? user.image,
           });
-        } catch {
+        } catch (err) {
           // Don't block sign-in if KV is temporarily unavailable
+          console.error(`[Auth] signIn KV error for ${user.email}:`, err);
         }
       }
       return true;
@@ -45,7 +47,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.dbId = dbUser.id;
             token.isAdmin = dbUser.isAdmin ?? false;
           }
-        } catch {
+        } catch (err) {
+          console.error(`[Auth] jwt KV error for ${token.email}:`, err);
           if (!token.tier) token.tier = "free";
           if (token.isAdmin === undefined) token.isAdmin = false;
         }
